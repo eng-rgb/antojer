@@ -2,41 +2,38 @@
 <html lang="ur" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Antojer — Urdu AI Companion</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="app">
-    <section class="character-card">
-      <div class="portrait-wrap">
-        <div id="portrait" class="portrait">
-          <div class="hair"></div>
-          <div class="face">
-            <div class="brow left"></div><div class="brow right"></div>
-            <div class="eye left"><i></i></div><div class="eye right"><i></i></div>
-            <div class="nose"></div><div id="mouth" class="mouth"></div>
-            <div class="cheek left"></div><div class="cheek right"></div>
-          </div>
-          <div class="dupatta"></div>
-        </div>
-      </div>
-      <h1>انتوجر</h1>
-      <p id="status">کیمرہ آن کریں، پھر گفتگو شروع ہوگی۔</p>
-      <div id="caption" class="caption">السلام علیکم! کیمرہ آن ہونے کے بعد میں آپ سے خود بات شروع کروں گی۔</div>
-      <div class="controls">
-        <button id="cameraBtn">📷 کیمرہ آن کریں</button>
-        <button id="micBtn" disabled>🎙️ مائیک آن کریں</button>
-        <button id="stopBtn">⏹ روکیں</button>
-      </div>
-    </section>
-
     <section class="camera-card">
       <video id="video" autoplay playsinline muted></video>
       <div id="faceBox" class="face-box"></div>
-      <div class="camera-note">کیمرہ صرف مقامی طور پر موجودگی/چہرے کی پوزیشن سمجھنے کے لیے استعمال ہوتا ہے؛ شناخت نہیں کی جاتی۔</div>
+      <p class="camera-note">کیمرہ صرف مقامی presence/face detection کے لیے استعمال ہوتا ہے۔ شناخت نہیں کی جاتی۔</p>
+    </section>
+
+    <section class="character-card">
+      <div id="portrait" class="portrait thoughtful">
+        <img src="/character.png" alt="Antojer — fictional AI character">
+        <div id="mouth" class="mouth"></div>
+      </div>
+
+      <h1>انتوجر</h1>
+      <p class="subtitle">ایک fictional Urdu AI companion</p>
+
+      <div id="status" class="status">کیمرہ آن کریں۔</div>
+      <div id="caption" class="caption">میں آپ سے قدرتی انداز میں اردو میں گفتگو کروں گی۔</div>
+
+      <div class="controls">
+        <button id="cameraBtn">📷 کیمرہ آن کریں</button>
+        <button id="micBtn" disabled>🎙️ بولیں</button>
+        <button id="stopBtn">⏹️ روکیں</button>
+      </div>
     </section>
   </main>
-  <script src="app.js"></script>
+
+  <script src="/app.js"></script>
 </body>
 </html>
