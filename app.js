@@ -5,282 +5,299 @@ const stopBtn = document.getElementById("stopBtn");
 const statusEl = document.getElementById("status");
 const caption = document.getElementById("caption");
 const portrait = document.getElementById("portrait");
+const characterImage = document.getElementById("characterImage");
 const mouth = document.getElementById("mouth");
 const faceBox = document.getElementById("faceBox");
 
 let stream = null;
-let recognition = null;
-let listening = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let audioContext = null;
+let analyser = null;
+let sourceNode = null;
+let audioElement = null;
+let animationFrame = null;
+let recording = false;
+let processing = false;
 let speaking = false;
 let stopped = true;
-let processing = false;
 let history = [];
-let restartTimer = null;
-let mouthTimer = null;
+let currentEmotion = "happy";
 
-const API_BASE_URL = "";
+const emotionImages = {
+  happy: "/emotion-happy.png",
+  thoughtful: "/emotion-thoughtful.png",
+  concerned: "/emotion-concerned.png",
+  shy: "/emotion-shy.png",
+  playful: "/emotion-playful.png"
+};
 
-function setEmotion(emotion) {
-  portrait.className = "portrait " + (emotion || "neutral");
+function setStatus(t){ statusEl.textContent = t; }
+function setCaption(t){ caption.textContent = t; }
+
+function setEmotion(emotion){
+  const e = emotionImages[emotion] ? emotion : "happy";
+  currentEmotion = e;
+  portrait.className = "portrait emotion-" + e + (speaking ? " speaking" : "");
+  characterImage.src = emotionImages[e];
 }
 
-function setStatus(text) {
-  statusEl.textContent = text;
+function setSpeaking(on){
+  speaking = on;
+  portrait.classList.toggle("speaking", on);
+  mouth.classList.toggle("talking", on);
 }
 
-function setCaption(text) {
-  caption.textContent = text;
-}
-
-/* Visual mouth movement while the browser's Urdu voice is speaking. */
-function startMouthAnimation() {
-  clearInterval(mouthTimer);
-  mouth.classList.add("talking");
-  mouthTimer = setInterval(() => {
-    mouth.classList.toggle("talking");
-  }, 110);
-}
-
-function stopMouthAnimation() {
-  clearInterval(mouthTimer);
-  mouthTimer = null;
-  mouth.classList.remove("talking");
-}
-
-function chooseEmotion(text) {
+function pickEmotion(text){
   const t = String(text || "");
 
-  if (/(زبردست|واہ|خوش|مزہ|ہاہا|مبارک|کمال|دلچسپ|خوب|اچھا ہوا)/.test(t)) {
-    return "happy";
-  }
-  if (/(افسوس|غم|اداس|پریشان|فکر|معذرت|دکھ|مشکل|مایوس)/.test(t)) {
-    return "concerned";
-  }
-  if (/(واقعی|حیرت|اوہ|ارے|کیا واقعی|سچ میں)/.test(t)) {
-    return "surprised";
-  }
-  if (/(شاید|میرے خیال|غور|سوچ|سوچتی|سوچ رہا)/.test(t)) {
-    return "thoughtful";
-  }
-  return "neutral";
+  if (/(افسوس|اداس|پریشان|فکر|معذرت|دکھ|مشکل|مایوس|غم)/.test(t)) return "concerned";
+  if (/(واقعی|حیرت|اوہ|ارے|کیا واقعی|سچ میں)/.test(t)) return "thoughtful";
+  if (/(شاید|میرے خیال|غور|سوچ|سوچتی)/.test(t)) return "thoughtful";
+  if (/(ہاہا|مزاح|زبردست|واہ|کمال|خوش|مزہ|مبارک|دلچسپ)/.test(t)) return "happy";
+  return "happy";
 }
 
-function speak(text) {
-  return new Promise((resolve) => {
-    if (!text) {
-      resolve();
-      return;
+async function unlockAudio(){
+  try{
+    if(!audioContext){
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    if(audioContext.state === "suspended") await audioContext.resume();
+  }catch(e){
+    console.warn("AudioContext unlock failed", e);
+  }
+}
 
-    speechSynthesis.cancel();
+function stopAudioAnimation(){
+  if(animationFrame) cancelAnimationFrame(animationFrame);
+  animationFrame = null;
+  setSpeaking(false);
+  if(sourceNode){
+    try{sourceNode.disconnect();}catch(_){}
+    sourceNode = null;
+  }
+}
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "ur-PK";
-    utterance.rate = 0.90;
-    utterance.pitch = 1.03;
+function animateMouth(){
+  if(!analyser || !speaking) return;
 
-    utterance.onstart = () => {
-      speaking = true;
-      startMouthAnimation();
-    };
+  const data = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(data);
 
-    utterance.onend = () => {
-      speaking = false;
-      stopMouthAnimation();
-      resolve();
-    };
+  let sum = 0;
+  for(let i=0;i<data.length;i++){
+    const v = (data[i]-128)/128;
+    sum += v*v;
+  }
 
-    utterance.onerror = () => {
-      speaking = false;
-      stopMouthAnimation();
-      resolve();
-    };
+  const rms = Math.sqrt(sum/data.length);
+  const amount = Math.min(1.45, .35 + rms*9);
+  mouth.style.transform = `translate(-50%,-50%) scaleY(${amount})`;
 
-    speechSynthesis.speak(utterance);
+  animationFrame = requestAnimationFrame(animateMouth);
+}
+
+async function playTTS(base64){
+  if(!base64) return;
+
+  await unlockAudio();
+
+  stopAudioAnimation();
+
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], {type:"audio/mpeg"});
+  const url = URL.createObjectURL(blob);
+
+  audioElement = new Audio(url);
+  audioElement.preload = "auto";
+  audioElement.playsInline = true;
+
+  await new Promise((resolve,reject)=>{
+    audioElement.oncanplay = resolve;
+    audioElement.onerror = reject;
+    audioElement.load();
   });
-}
 
-function stopRecognition() {
-  if (!recognition) return;
-  try {
-    recognition.stop();
-  } catch (_) {}
-}
-
-function scheduleListening() {
-  clearTimeout(restartTimer);
-
-  if (stopped || !stream || speaking || processing) return;
-
-  restartTimer = setTimeout(() => {
-    if (!stopped && stream && !speaking && !processing && !listening) {
-      startListening();
-    }
-  }, 600);
-}
-
-function startRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SR) {
-    setCaption("اس browser میں speech recognition دستیاب نہیں۔ Chrome استعمال کریں۔");
-    return false;
+  try{
+    sourceNode = audioContext.createMediaElementSource(audioElement);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    sourceNode.connect(analyser);
+    analyser.connect(audioContext.destination);
+  }catch(e){
+    console.warn("Audio analyser unavailable", e);
   }
 
-  recognition = new SR();
-  recognition.lang = "ur-PK";
-  recognition.interimResults = false;
-  recognition.continuous = false;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    listening = true;
-    setStatus("میں آپ کی بات سن رہی ہوں…");
+  audioElement.onplay = ()=>{
+    setSpeaking(true);
+    animateMouth();
   };
 
-  recognition.onresult = async (event) => {
-    listening = false;
-
-    const text = event.results?.[0]?.[0]?.transcript?.trim();
-    if (!text) {
-      scheduleListening();
-      return;
-    }
-
-    setCaption("آپ: " + text);
-    setEmotion("thoughtful");
-    await askAI(text, false);
+  audioElement.onended = ()=>{
+    stopAudioAnimation();
+    URL.revokeObjectURL(url);
   };
 
-  recognition.onerror = (event) => {
-    listening = false;
-    console.warn("Speech recognition:", event.error);
-
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      setStatus("مائیک کی اجازت درکار ہے۔");
-      setCaption("Chrome میں Microphone کو Allow کریں، پھر بولیں دبائیں۔");
-      return;
-    }
-
-    if (!stopped && stream && !speaking && !processing) {
-      setStatus("میں دوبارہ سننے کے لیے تیار ہوں۔");
-      scheduleListening();
-    }
+  audioElement.onerror = ()=>{
+    stopAudioAnimation();
+    URL.revokeObjectURL(url);
   };
 
-  recognition.onend = () => {
-    listening = false;
-
-    if (!stopped && stream && !speaking && !processing) {
-      scheduleListening();
-    }
-  };
-
-  return true;
+  await audioElement.play();
 }
 
-function startListening() {
-  if (stopped || !stream || speaking || processing) return;
-
-  if (!recognition && !startRecognition()) return;
-  if (listening) return;
-
-  try {
-    recognition.start();
-  } catch (error) {
-    console.warn("Recognition start:", error);
-
-    setTimeout(() => {
-      if (!stopped && stream && !speaking && !processing && !listening) {
-        try {
-          recognition.start();
-        } catch (_) {}
-      }
-    }, 700);
-  }
-}
-
-async function askAI(userText, proactive = false) {
-  if (!userText || stopped || processing) return;
+async function sendTurn(text){
+  if(!text || stopped || processing) return;
 
   processing = true;
-  stopRecognition();
-
-  history.push({ role: "user", content: userText });
+  history.push({role:"user",content:text});
   history = history.slice(-30);
 
   setStatus("جواب تیار ہو رہا ہے…");
+  setCaption("آپ: " + text);
   setEmotion("thoughtful");
 
-  try {
-    const response = await fetch(API_BASE_URL + "/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      },
-      body: JSON.stringify({
-        messages: history,
-        proactive
-      })
+  try{
+    const r = await fetch("/api/chat",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify({messages:history})
     });
 
-    const raw = await response.text();
+    const raw = await r.text();
     let data = {};
+    try{ data = JSON.parse(raw); }catch(_){}
 
-    try {
-      data = JSON.parse(raw);
-    } catch (_) {}
-
-    if (!response.ok) {
-      throw new Error(data.error || raw || ("HTTP " + response.status));
-    }
+    if(!r.ok) throw new Error(data.error || raw || ("HTTP "+r.status));
 
     const reply = String(data.reply || "").trim();
+    if(!reply) throw new Error("Empty AI response");
 
-    if (!reply) {
-      throw new Error("Empty AI response");
-    }
-
-    history.push({ role: "assistant", content: reply });
-
+    history.push({role:"assistant",content:reply});
     setCaption(reply);
-    setEmotion(chooseEmotion(reply));
-    setStatus("میں بول رہی ہوں…");
+    setEmotion(pickEmotion(reply));
+    setStatus("میں جواب دے رہی ہوں…");
 
-    await speak(reply);
+    await playTTS(data.audio_base64);
 
-    if (!stopped && stream) {
-      setStatus("اب آپ کی باری ہے…");
-      processing = false;
-
-      /* Automatically listen for the next turn. */
-      scheduleListening();
-    }
-  } catch (error) {
-    console.error("AI request failed:", error);
-
-    setEmotion("concerned");
-    setStatus("AI سے رابطے میں مسئلہ ہے۔");
-    setCaption("AI جواب نہیں دے سکی۔ دوبارہ کوشش کریں۔");
-
+    setStatus("اب آپ جواب دے سکتے ہیں۔");
     processing = false;
-
-    if (!stopped && stream) {
-      scheduleListening();
-    }
+  }catch(e){
+    console.error(e);
+    processing = false;
+    setEmotion("concerned");
+    setStatus("AI جواب نہیں دے سکی۔");
+    setCaption("مسئلہ آیا ہے۔ دوبارہ جواب دیں۔");
   }
 }
 
-async function startCamera() {
-  if (stream) return;
+async function recordUserTurn(){
+  if(stopped || !stream || recording || processing) return;
+
+  await unlockAudio();
+
+  if(!navigator.mediaDevices?.getUserMedia){
+    setCaption("اس browser میں microphone دستیاب نہیں۔");
+    return;
+  }
+
+  try{
+    const micStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    audioChunks = [];
+
+    const mime =
+      MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" :
+      MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" :
+      "audio/mp4";
+
+    mediaRecorder = new MediaRecorder(micStream, {mimeType:mime});
+    recording = true;
+
+    micBtn.textContent = "⏹️ جواب مکمل";
+    setStatus("میں سن رہی ہوں…");
+    setCaption("اپنا جواب بولیں۔");
+
+    mediaRecorder.ondataavailable = e=>{
+      if(e.data.size) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async ()=>{
+      recording = false;
+      micBtn.textContent = "🎙️ جواب دیں";
+
+      micStream.getTracks().forEach(t=>t.stop());
+
+      const blob = new Blob(audioChunks,{type:mime});
+      if(blob.size < 1000){
+        setStatus("آواز بہت مختصر تھی۔");
+        return;
+      }
+
+      processing = true;
+      setStatus("آپ کی بات سمجھ رہی ہوں…");
+
+      const form = new FormData();
+      form.append("audio", blob, "user-audio.webm");
+
+      try{
+        const r = await fetch("/api/transcribe",{
+          method:"POST",
+          body:form
+        });
+
+        const raw = await r.text();
+        let data = {};
+        try{ data = JSON.parse(raw); }catch(_){}
+
+        if(!r.ok) throw new Error(data.error || raw || ("HTTP "+r.status));
+
+        const text = String(data.text || "").trim();
+        processing = false;
+
+        if(!text){
+          setStatus("مجھے آواز سمجھ نہیں آئی۔");
+          return;
+        }
+
+        await sendTurn(text);
+      }catch(e){
+        console.error("Transcription failed",e);
+        processing = false;
+        setStatus("آواز سمجھنے میں مسئلہ آیا۔");
+        setCaption("دوبارہ “جواب دیں” دبائیں اور واضح بولیں۔");
+      }
+    };
+
+    mediaRecorder.start();
+  }catch(e){
+    recording = false;
+    micBtn.textContent = "🎙️ جواب دیں";
+    console.error("Microphone error",e);
+    setStatus("مائیک کی اجازت درکار ہے۔");
+    setCaption("Chrome میں Microphone کو Allow کریں۔");
+  }
+}
+
+micBtn.addEventListener("click",()=>{
+  if(recording){
+    try{ mediaRecorder.stop(); }catch(_){}
+  }else{
+    recordUserTurn();
+  }
+});
+
+async function startCamera(){
+  if(stream) return;
 
   stopped = false;
 
-  try {
+  try{
+    await unlockAudio();
+
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user" },
-      audio: true
+      video:{facingMode:"user"},
+      audio:false
     });
 
     video.srcObject = stream;
@@ -290,89 +307,116 @@ async function startCamera() {
     setStatus("میں آپ کو دیکھ رہی ہوں…");
     setCaption("کیمرہ آن ہو گیا۔");
 
-    /* Keep the first AI message natural and varied. */
-    await askAI(
-      "میں نے ابھی کیمرہ آن کیا ہے۔ خود سے ایک نئی، مختصر اور قدرتی اردو گفتگو شروع کرو۔ کوئی تازہ موضوع چنو، پہلے سے طے شدہ جملہ استعمال نہ کرو، اور آخر میں مجھ سے ایک آسان سا سوال پوچھو تاکہ گفتگو جاری رہ سکے۔",
-      true
-    );
-  } catch (error) {
-    console.error("Camera/microphone:", error);
+    await sendProactive();
+  }catch(e){
+    console.error("Camera",e);
     stopped = true;
-    setStatus("کیمرہ/مائیک کی اجازت درکار ہے۔");
-    setCaption("Browser میں Camera اور Microphone کو Allow کریں۔");
+    setStatus("کیمرہ کی اجازت درکار ہے۔");
+    setCaption("Browser میں Camera کو Allow کریں۔");
   }
 }
 
-cameraBtn.addEventListener("click", startCamera);
+async function sendProactive(){
+  if(stopped || processing) return;
 
-micBtn.addEventListener("click", () => {
-  if (!stream) return;
+  processing = true;
+  history.push({
+    role:"user",
+    content:"کیمرہ ابھی آن ہوا ہے۔ خود سے ایک نئی، مختصر، قدرتی اردو گفتگو شروع کرو، کوئی تازہ موضوع چنو، اور آخر میں مجھ سے ایک آسان سوال پوچھو۔"
+  });
 
-  stopped = false;
-  startListening();
-});
+  try{
+    const r = await fetch("/api/chat",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify({messages:history})
+    });
 
-stopBtn.addEventListener("click", () => {
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || "AI request failed");
+
+    const reply = String(data.reply || "").trim();
+    if(!reply) throw new Error("Empty reply");
+
+    history.push({role:"assistant",content:reply});
+    setCaption(reply);
+    setEmotion(pickEmotion(reply));
+    setStatus("میں جواب دے رہی ہوں…");
+
+    await playTTS(data.audio_base64);
+
+    processing = false;
+    setStatus("اب آپ جواب دے سکتے ہیں۔");
+  }catch(e){
+    console.error(e);
+    processing = false;
+    setEmotion("concerned");
+    setStatus("AI جواب نہیں دے سکی۔");
+    setCaption("دوبارہ کوشش کریں۔");
+  }
+}
+
+cameraBtn.addEventListener("click",startCamera);
+
+stopBtn.addEventListener("click",()=>{
   stopped = true;
-  clearTimeout(restartTimer);
+  processing = false;
+  recording = false;
 
-  stopRecognition();
+  try{ if(mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop(); }catch(_){}
 
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
     stream = null;
   }
 
-  speechSynthesis.cancel();
-  stopMouthAnimation();
+  if(audioElement){
+    try{audioElement.pause();}catch(_){}
+    audioElement = null;
+  }
 
-  listening = false;
-  speaking = false;
-  processing = false;
+  stopAudioAnimation();
+
   history = [];
-
   cameraBtn.disabled = false;
   micBtn.disabled = true;
+  micBtn.textContent = "🎙️ جواب دیں";
 
-  setEmotion("neutral");
+  setEmotion("happy");
   setStatus("روک دیا گیا۔");
   setCaption("دوبارہ شروع کرنے کے لیے کیمرہ آن کریں۔");
 });
 
-/* Local, non-identifying face/presence box only. */
-(async () => {
-  if (!("FaceDetector" in window)) return;
+(async()=>{
+  if(!("FaceDetector" in window)) return;
 
-  try {
-    const detector = new FaceDetector({
-      fastMode: true,
-      maxDetectedFaces: 1
-    });
+  try{
+    const detector = new FaceDetector({fastMode:true,maxDetectedFaces:1});
 
-    const loop = async () => {
-      if (video.readyState >= 2 && video.videoWidth) {
-        try {
+    const loop = async()=>{
+      if(video.readyState >= 2 && video.videoWidth){
+        try{
           const faces = await detector.detect(video);
 
-          if (faces.length) {
+          if(faces.length){
             const b = faces[0].boundingBox;
-            const sx = video.clientWidth / video.videoWidth;
-            const sy = video.clientHeight / video.videoHeight;
+            const sx = video.clientWidth/video.videoWidth;
+            const sy = video.clientHeight/video.videoHeight;
 
             faceBox.style.display = "block";
-            faceBox.style.left = (video.offsetLeft + b.x * sx) + "px";
-            faceBox.style.top = (video.offsetTop + b.y * sy) + "px";
-            faceBox.style.width = (b.width * sx) + "px";
-            faceBox.style.height = (b.height * sy) + "px";
-          } else {
+            faceBox.style.left = (video.offsetLeft+b.x*sx)+"px";
+            faceBox.style.top = (video.offsetTop+b.y*sy)+"px";
+            faceBox.style.width = (b.width*sx)+"px";
+            faceBox.style.height = (b.height*sy)+"px";
+          }else{
             faceBox.style.display = "none";
           }
-        } catch (_) {}
+        }catch(_){}
       }
 
       requestAnimationFrame(loop);
     };
 
     loop();
-  } catch (_) {}
+  }catch(_){}
 })();

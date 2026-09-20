@@ -15,9 +15,10 @@
     </section>
 
     <section class="character-card">
-      <div id="portrait" class="portrait thoughtful">
-        <img src="/character.png" alt="Antojer — fictional AI character">
-        <div id="mouth" class="mouth"></div>
+      <div id="portrait" class="portrait emotion-happy">
+        <img id="characterImage" src="/character.png" alt="Antojer — fictional AI character">
+        <div id="mouth" class="mouth" aria-hidden="true"></div>
+        <div id="speakingGlow" class="speaking-glow" aria-hidden="true"></div>
       </div>
 
       <h1>انتوجر</h1>
@@ -28,9 +29,11 @@
 
       <div class="controls">
         <button id="cameraBtn">📷 کیمرہ آن کریں</button>
-        <button id="micBtn" disabled>🎙️ بولیں</button>
+        <button id="micBtn" disabled>🎙️ جواب دیں</button>
         <button id="stopBtn">⏹️ روکیں</button>
       </div>
+
+      <p id="help" class="help">Camera On کے بعد Antojer خود بات شروع کرے گی۔ جواب دینے کے لیے “جواب دیں” دبائیں۔</p>
     </section>
   </main>
 

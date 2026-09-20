@@ -1,9 +1,9 @@
 :root{
-  --bg:#071d36;
-  --panel:#102c4b;
-  --panel2:#0c2440;
-  --border:rgba(255,255,255,.12);
-  --text:#f4f7fb;
+  --bg1:#06182e;
+  --bg2:#0b2a4b;
+  --panel:rgba(17,45,76,.93);
+  --border:rgba(255,255,255,.13);
+  --text:#f5f7fb;
   --muted:#aebdce;
 }
 
@@ -12,32 +12,30 @@
 body{
   margin:0;
   min-height:100vh;
-  background:linear-gradient(135deg,#061a31,#0b2949);
+  background:linear-gradient(135deg,var(--bg1),var(--bg2));
   color:var(--text);
   font-family:Arial,"Noto Sans",sans-serif;
 }
 
 .app{
   width:min(1080px,94vw);
-  margin:28px auto;
+  margin:24px auto;
+  min-height:calc(100vh - 48px);
   display:grid;
   grid-template-columns:minmax(320px,1fr) minmax(320px,1fr);
   gap:22px;
   align-items:center;
 }
 
-.camera-card,
-.character-card{
-  background:rgba(16,44,75,.86);
+.camera-card,.character-card{
+  background:var(--panel);
   border:1px solid var(--border);
   border-radius:22px;
   padding:14px;
-  box-shadow:0 12px 35px rgba(0,0,0,.2);
+  box-shadow:0 14px 45px rgba(0,0,0,.22);
 }
 
-.camera-card{
-  position:relative;
-}
+.camera-card{position:relative}
 
 #video{
   display:block;
@@ -50,10 +48,10 @@ body{
 }
 
 .camera-note{
-  margin:10px 4px 2px;
+  margin:9px 4px 2px;
   color:var(--muted);
   font-size:12px;
-  line-height:1.5;
+  line-height:1.55;
 }
 
 .face-box{
@@ -64,101 +62,97 @@ body{
   pointer-events:none;
 }
 
-.character-card{
-  text-align:center;
-}
+.character-card{text-align:center}
 
 .portrait{
   position:relative;
   width:100%;
   max-width:520px;
-  margin:0 auto 12px;
-  border-radius:18px;
+  aspect-ratio:780/1050;
+  margin:0 auto 13px;
   overflow:hidden;
-  background:#111;
-  transition:transform .45s ease,filter .45s ease;
+  border-radius:18px;
+  background:#151d26;
+  transition:filter .35s ease,transform .35s ease;
 }
 
 .portrait img{
-  display:block;
   width:100%;
-  height:auto;
+  height:100%;
+  display:block;
+  object-fit:cover;
+  object-position:center top;
+  transition:opacity .18s ease,filter .35s ease;
 }
 
-.portrait.happy{
-  transform:translateY(-2px);
-  filter:saturate(1.08) brightness(1.04);
-}
-
-.portrait.concerned{
-  filter:saturate(.9) brightness(.96);
-}
-
-.portrait.thoughtful{
-  filter:saturate(.98);
-}
-
-.portrait.surprised{
-  transform:scale(1.008);
-  filter:brightness(1.05);
-}
-
-.portrait.neutral{
-  filter:none;
-}
+.portrait.emotion-happy{filter:saturate(1.08) brightness(1.03)}
+.portrait.emotion-thoughtful{filter:saturate(.98)}
+.portrait.emotion-concerned{filter:saturate(.88) brightness(.95)}
+.portrait.emotion-shy{filter:saturate(.94)}
+.portrait.emotion-playful{filter:saturate(1.1) brightness(1.02)}
+.portrait.speaking{transform:translateY(-1px)}
 
 .mouth{
   position:absolute;
-  left:51.5%;
-  top:52.9%;
-  width:9%;
-  height:2.3%;
+  left:57.2%;
+  top:38.7%;
+  width:10%;
+  height:2.8%;
   transform:translate(-50%,-50%) scaleY(.45);
+  transform-origin:center;
   border-radius:50%;
-  background:rgba(75,20,25,.82);
-  opacity:.0;
-  transition:transform .09s ease,opacity .12s ease;
+  background:rgba(89,27,36,.72);
+  box-shadow:0 0 2px rgba(0,0,0,.25);
+  opacity:0;
   pointer-events:none;
+  transition:opacity .08s linear;
+  z-index:3;
 }
 
 .mouth.talking{
-  opacity:.55;
-  transform:translate(-50%,-50%) scaleY(1.25);
+  opacity:.64;
 }
 
-.mouth.talking:nth-child(odd){
-  transform:translate(-50%,-50%) scaleY(.7);
+.speaking-glow{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity:0;
+  background:radial-gradient(circle at 58% 39%,rgba(255,255,255,.08),transparent 18%);
+  transition:opacity .15s ease;
+  z-index:2;
+}
+
+.portrait.speaking .speaking-glow{
+  opacity:1;
 }
 
 h1{
-  margin:6px 0 2px;
+  margin:5px 0 2px;
   font-size:27px;
 }
 
 .subtitle{
-  margin:0 0 13px;
+  margin:0 0 12px;
   color:var(--muted);
   font-size:13px;
 }
 
-.status,
-.caption{
+.status,.caption{
   border-radius:12px;
-  padding:11px 13px;
-  margin-top:9px;
-  line-height:1.65;
+  padding:10px 13px;
+  margin-top:8px;
+  line-height:1.7;
   font-size:14px;
 }
 
 .status{
   background:rgba(255,255,255,.08);
-  color:#eaf2fb;
 }
 
 .caption{
-  background:rgba(3,16,31,.42);
-  color:#f6f8fb;
-  min-height:48px;
+  min-height:52px;
+  background:rgba(2,14,28,.45);
 }
 
 .controls{
@@ -170,7 +164,7 @@ h1{
 }
 
 button{
-  min-height:44px;
+  min-height:45px;
   border:0;
   border-radius:11px;
   padding:10px 15px;
@@ -189,14 +183,22 @@ button:disabled{
 }
 
 #stopBtn{
-  background:#314a68;
+  background:#304b69;
   color:#fff;
+}
+
+.help{
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+  margin:11px 5px 2px;
 }
 
 @media(max-width:760px){
   .app{
-    grid-template-columns:1fr;
     width:min(520px,94vw);
-    margin:18px auto 30px;
+    grid-template-columns:1fr;
+    min-height:auto;
+    margin:18px auto 28px;
   }
 }
